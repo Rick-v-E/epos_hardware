@@ -54,6 +54,7 @@ int GetBaudrateList(const std::string device_name, const std::string protocol_st
                     const std::string port_name, std::vector<unsigned int> *port_names, unsigned int *error_code);
 
 hardware_interface::return_type getParamString(std::unordered_map<std::string, std::string> parameter_map, std::string parameter_name, std::string *variable_ptr);
+hardware_interface::return_type getParamDouble(std::unordered_map<std::string, std::string> parameter_map, std::string parameter_name, double *variable_ptr);
 hardware_interface::return_type getParamInt(std::unordered_map<std::string, std::string> parameter_map, std::string parameter_name, int *variable_ptr);
 hardware_interface::return_type getParamBoolean(std::unordered_map<std::string, std::string> parameter_map, std::string parameter_name, bool *variable_ptr);
 

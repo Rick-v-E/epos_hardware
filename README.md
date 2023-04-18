@@ -26,6 +26,8 @@ Add the plugin to the `ros2_control` tag in your URDF file:
             <param name="interface_name">USB</param>
             <param name="serial_number">0xxxxxxxxxxxxx</param>
             <param name="clear_faults">false</param>
+            <param name="profile_acceleration">50</param>
+            <param name="profile_deceleration">50</param>
 
             <command_interface name="velocity"/>
             <state_interface name="position"/>
@@ -45,6 +47,8 @@ Add the plugin to the `ros2_control` tag in your URDF file:
             <param name="interface_name">USB</param>
             <param name="serial_number">0xxxxxxxxxxxxx</param>
             <param name="clear_faults">false</param>
+            <param name="profile_acceleration">50</param>
+            <param name="profile_deceleration">50</param>
 
             <command_interface name="velocity"/>
             <state_interface name="position"/>
@@ -60,7 +64,7 @@ Add the plugin to the `ros2_control` tag in your URDF file:
 </ros2_control>
 ```
 
-In our setup, every controller is connected seperately to the computer using USB, however, all methods that work with the Epos Command Library should also work with this code. For each joint, an `device_name`, `protocol_stack_name`, `interface_name`, `serial_number` and `encoder_resolution` parameter should be set. Additionally, a `clear_faults` parameter can be set, which clears all device faults upon start.
+In our setup, every controller is connected seperately to the computer using USB, however, all methods that work with the Epos Command Library should also work with this code. For each joint, an `device_name`, `protocol_stack_name`, `interface_name`, `serial_number` and `encoder_resolution` parameter should be set. The `profile_acceleration` and `profile_deceleration` parameters define the acceleration and deceleration of the motors in rad/s<sup>2</sup>. Additionally, a `clear_faults` parameter can be set, which clears all device faults upon start.
 
 ## Supported command interfaces
 Command interface `position`, `velocity` and `current` are supported.

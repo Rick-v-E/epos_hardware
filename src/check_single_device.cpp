@@ -78,6 +78,16 @@ int main(int argc, char **argv)
             return 0;
         }
 
+        unsigned int acceleration, deceleration;
+        const double conversionFactor = std::pow(2 * M_PI / 60.0, 2);
+        VCS_WRAPPER(VCS_GetVelocityProfile, node_handle_, &acceleration, &deceleration);
+
+        double acceleration_rad = acceleration * conversionFactor;
+        double deceleration_rad = deceleration * conversionFactor;
+
+        std::cout << "Profile velocity: acceleration->" << acceleration_rad << "rad/s2 deceleration->" << deceleration_rad << "rad/s2" << std::endl;
+
+
         std::cout << "Enabling Motor" << std::endl;
         VCS_WRAPPER_NA(VCS_SetEnableState, node_handle_);
         VCS_WRAPPER_NA(VCS_ActivateProfileVelocityMode, node_handle_);

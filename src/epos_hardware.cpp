@@ -59,6 +59,16 @@ namespace epos_hardware
                 return CallbackReturn::ERROR;
             }
 
+            if (getParamDouble(info_.joints[i].parameters, "profile_acceleration", &actuators_[i].profile_acceleration) != return_type::OK)
+            {
+                return CallbackReturn::ERROR;
+            }
+
+            if (getParamDouble(info_.joints[i].parameters, "profile_deceleration", &actuators_[i].profile_deceleration) != return_type::OK)
+            {
+                return CallbackReturn::ERROR;
+            }
+
             // Find transmission corresponding with joint
             for (auto transmission_info : info_.transmissions)
             {
@@ -309,6 +319,22 @@ namespace epos_hardware
                             if (!use_dummy_)
                             {
                                 VCS_WRAPPER_NA(VCS_ActivateProfileVelocityMode, actuators_[i].node_handle);
+
+
+                                // Configure profile
+                                double acceleration, deceleration;
+                                const double conversionFactor = std::pow(2 * M_PI / 60.0, 2);
+
+                                acceleration = actuators_[i].profile_acceleration / conversionFactor;
+                                deceleration = actuators_[i].profile_deceleration / conversionFactor;
+
+                                int acceleration_raw = static_cast<int>(std::round(acceleration));
+                                int deceleration_raw = static_cast<int>(std::round(deceleration));
+
+                                RCLCPP_INFO_STREAM(rclcpp::get_logger(HW_NAME), "ACC '" << actuators_[i].profile_acceleration << "' DEC '" << actuators_[i].profile_deceleration << "'");                                
+                                RCLCPP_INFO_STREAM(rclcpp::get_logger(HW_NAME), "ACC '" << acceleration_raw << "' DEC '" << deceleration_raw << "'");                                
+
+                                VCS_WRAPPER(VCS_SetVelocityProfile, actuators_[i].node_handle, acceleration_raw, deceleration_raw);
                             }
 
                             actuators_[i].command_interface_name = hardware_interface::HW_IF_VELOCITY;

@@ -300,6 +300,19 @@ return_type getParamInt(std::unordered_map<std::string, std::string> parameter_m
   return return_type::OK;
 }
 
+return_type getParamDouble(std::unordered_map<std::string, std::string> parameter_map, std::string parameter_name, double *variable_ptr)
+{
+  if (parameter_map.find(parameter_name) == parameter_map.end())
+  {
+    RCLCPP_ERROR_STREAM(rclcpp::get_logger("EposHardware"), "Cannot find parameter '" << parameter_name << "'!");
+    return return_type::ERROR;
+  }
+
+  int value = std::stod(parameter_map.at(parameter_name));
+  *variable_ptr = value;
+  return return_type::OK;
+}
+
 return_type getParamBoolean(std::unordered_map<std::string, std::string> parameter_map, std::string parameter_name, bool *variable_ptr)
 {
   bool value = (parameter_map.find(parameter_name) != parameter_map.end() && parameter_map.at(parameter_name) == "true");
