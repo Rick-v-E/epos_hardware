@@ -59,12 +59,27 @@ namespace epos_hardware
                 return CallbackReturn::ERROR;
             }
 
-            if (getParamDouble(info_.joints[i].parameters, "profile_acceleration", &actuators_[i].profile_acceleration) != return_type::OK)
+            if (getParamDouble(info_.joints[i].parameters, "profile_position_velocity", &actuators_[i].profile_position_velocity) != return_type::OK)
             {
                 return CallbackReturn::ERROR;
             }
 
-            if (getParamDouble(info_.joints[i].parameters, "profile_deceleration", &actuators_[i].profile_deceleration) != return_type::OK)
+            if (getParamDouble(info_.joints[i].parameters, "profile_position_acceleration", &actuators_[i].profile_position_acceleration) != return_type::OK)
+            {
+                return CallbackReturn::ERROR;
+            }
+
+            if (getParamDouble(info_.joints[i].parameters, "profile_position_deceleration", &actuators_[i].profile_position_deceleration) != return_type::OK)
+            {
+                return CallbackReturn::ERROR;
+            }
+
+            if (getParamDouble(info_.joints[i].parameters, "profile_velocity_acceleration", &actuators_[i].profile_velocity_acceleration) != return_type::OK)
+            {
+                return CallbackReturn::ERROR;
+            }
+
+            if (getParamDouble(info_.joints[i].parameters, "profile_velocity_deceleration", &actuators_[i].profile_velocity_deceleration) != return_type::OK)
             {
                 return CallbackReturn::ERROR;
             }
@@ -310,6 +325,17 @@ namespace epos_hardware
                             if (!use_dummy_)
                             {
                                 VCS_WRAPPER_NA(VCS_ActivateProfilePositionMode, actuators_[i].node_handle);
+
+                                 // Configure profile           
+                                double velocity = actuators_[i].profile_position_velocity / (2 * M_PI / 60.0);
+                                double acceleration = actuators_[i].profile_position_acceleration / std::pow(2 * M_PI / 60.0, 2);
+                                double deceleration = actuators_[i].profile_position_deceleration / std::pow(2 * M_PI / 60.0, 2);
+
+                                int velocity_raw = static_cast<int>(std::round(velocity));
+                                int acceleration_raw = static_cast<int>(std::round(acceleration));
+                                int deceleration_raw = static_cast<int>(std::round(deceleration));
+
+                                VCS_WRAPPER(VCS_SetPositionProfile, actuators_[i].node_handle, velocity_raw, acceleration_raw, deceleration_raw);
                             }
 
                             actuators_[i].command_interface_name = hardware_interface::HW_IF_POSITION;
@@ -320,19 +346,12 @@ namespace epos_hardware
                             {
                                 VCS_WRAPPER_NA(VCS_ActivateProfileVelocityMode, actuators_[i].node_handle);
 
-
                                 // Configure profile
-                                double acceleration, deceleration;
-                                const double conversionFactor = std::pow(2 * M_PI / 60.0, 2);
-
-                                acceleration = actuators_[i].profile_acceleration / conversionFactor;
-                                deceleration = actuators_[i].profile_deceleration / conversionFactor;
+                                double acceleration = actuators_[i].profile_velocity_acceleration / std::pow(2 * M_PI / 60.0, 2);
+                                double deceleration = actuators_[i].profile_velocity_deceleration / std::pow(2 * M_PI / 60.0, 2);
 
                                 int acceleration_raw = static_cast<int>(std::round(acceleration));
                                 int deceleration_raw = static_cast<int>(std::round(deceleration));
-
-                                RCLCPP_INFO_STREAM(rclcpp::get_logger(HW_NAME), "ACC '" << actuators_[i].profile_acceleration << "' DEC '" << actuators_[i].profile_deceleration << "'");                                
-                                RCLCPP_INFO_STREAM(rclcpp::get_logger(HW_NAME), "ACC '" << acceleration_raw << "' DEC '" << deceleration_raw << "'");                                
 
                                 VCS_WRAPPER(VCS_SetVelocityProfile, actuators_[i].node_handle, acceleration_raw, deceleration_raw);
                             }

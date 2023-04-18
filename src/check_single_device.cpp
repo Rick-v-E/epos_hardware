@@ -78,14 +78,23 @@ int main(int argc, char **argv)
             return 0;
         }
 
-        unsigned int acceleration, deceleration;
-        const double conversionFactor = std::pow(2 * M_PI / 60.0, 2);
-        VCS_WRAPPER(VCS_GetVelocityProfile, node_handle_, &acceleration, &deceleration);
+        unsigned int profile_velocity_raw, profile_acceleration_raw, profile_deceleration_raw;
+        double profile_velocity, profile_acceleration, profile_deceleration;
 
-        double acceleration_rad = acceleration * conversionFactor;
-        double deceleration_rad = deceleration * conversionFactor;
+        VCS_WRAPPER(VCS_GetVelocityProfile, node_handle_, &profile_acceleration_raw, &profile_deceleration_raw);
 
-        std::cout << "Profile velocity: acceleration->" << acceleration_rad << "rad/s2 deceleration->" << deceleration_rad << "rad/s2" << std::endl;
+        profile_acceleration = profile_acceleration_raw * std::pow(2 * M_PI / 60.0, 2);
+        profile_deceleration = profile_deceleration_raw * std::pow(2 * M_PI / 60.0, 2);
+
+        std::cout << "Profile velocity: acceleration->" << profile_acceleration << "rad/s2 deceleration->" << profile_deceleration << "rad/s2" << std::endl;
+
+        VCS_WRAPPER(VCS_GetPositionProfile, node_handle_, &profile_velocity_raw, &profile_acceleration_raw, &profile_deceleration_raw);
+
+        profile_velocity = profile_velocity_raw * 2 * M_PI / 60.0;
+        profile_acceleration = profile_acceleration_raw * std::pow(2 * M_PI / 60.0, 2);
+        profile_deceleration = profile_deceleration_raw * std::pow(2 * M_PI / 60.0, 2);
+
+        std::cout << "Profile position: velocity->" << profile_velocity << "rad/s acceleration->" << profile_acceleration << "rad/s2 deceleration->" << profile_deceleration << "rad/s2" << std::endl;
 
 
         std::cout << "Enabling Motor" << std::endl;

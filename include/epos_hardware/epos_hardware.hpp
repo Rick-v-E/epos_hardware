@@ -59,8 +59,11 @@ namespace epos_hardware
     std::string protocol_stack_name;
     std::string interface_name;
     uint64_t serial_number;
-    double profile_acceleration;
-    double profile_deceleration;
+    double profile_position_velocity;
+    double profile_position_acceleration;
+    double profile_position_deceleration;
+    double profile_velocity_acceleration;
+    double profile_velocity_deceleration;
     int encoder_resolution;
     bool clear_faults = false;
     bool reversed = false;
