@@ -1,0 +1,9 @@
+<library path="epos_hardware">
+  <class name="epos_hardware/EposHardware"
+         type="epos_hardware::EposHardware"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      The ros2_control for Maxon Epos controllers using a system hardware interface-type.
+    </description>
+  </class>
+</library>

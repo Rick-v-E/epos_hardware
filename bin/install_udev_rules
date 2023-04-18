@@ -1,0 +1,86 @@
+#!/bin/bash
+
+# EPOS Command Library 6.8.1.0 installation script
+# Copyright (c) maxon motor ag 2014-2022
+
+if [ $EUID != 0 ]; then
+    sudo "$0" "$@"
+    exit $?
+fi
+
+function check_result {
+	if (($? > 0)); then
+		printf ' [FAILED]\n'
+	else
+		printf ' [OK]\n'
+	fi
+}
+
+
+function install {
+	SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+	#add udev rules
+	printf ' - Configure device access rights'
+	cp -f "$SCRIPT_DIR/../99-ftdi.rules" /etc/udev/rules.d > /dev/null
+	cp -f "$SCRIPT_DIR/../99-epos4.rules" /etc/udev/rules.d > /dev/null
+	check_result
+
+	udevadm control --reload-rules && udevadm trigger
+
+	#add sudo rules
+	printf ' - Configure user access rights'
+	touch -f /etc/sudoers.d/mmc_rule
+	echo $SUDO_USER 'ALL=(ALL) NOPASSWD: /bin/ip' > /etc/sudoers.d/mmc_rule
+	chmod 0440 /etc/sudoers.d/mmc_rule
+	check_result
+
+	echo '---------------------------------------------------------'
+	echo 'EPOS Command Library 6.8.1.0 installed'
+	echo '---------------------------------------------------------'
+}
+
+function uninstall {
+	echo '---------------------------------------------------------'
+	echo 'EPOS Command Library 6.8.1.0 deinstallation started'
+	echo '---------------------------------------------------------'
+
+	#remove access rights
+	printf ' - Reconfigure user access rights'
+	rm -f /etc/sudoers.d/mmc_rule > /dev/null
+	check_result
+
+	#remove udev rules
+	printf ' - Reconfigure device access rights'
+	rm -f /etc/udev/rules.d/99-epos4.rules > /dev/null
+	rm -f /etc/udev/rules.d/99-ftdi.rules > /dev/null
+	check_result
+
+	service udev restart
+
+	echo '---------------------------------------------------------'
+	echo 'EPOS Command Library 6.8.1.0 uninstalled'
+	echo '---------------------------------------------------------'
+}
+
+if [ "$#" -eq 0 ]; then
+	install
+else
+	for i in "$@"
+	do
+	case $i in
+		"-u"|"--uninstall")
+		uninstall
+		shift
+		;;
+		"-i"|"--install")
+		install
+		shift
+		;;
+		*)
+		echo "usage install.sh -i /--install/ [default] -u /--uninstall/"
+		shift
+		;;
+	esac
+	done
+fi
