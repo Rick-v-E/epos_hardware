@@ -315,7 +315,7 @@ namespace epos_hardware
         {
             try
             {
-                if (actuators_[i].use_dummy_ && actuators_[i].node_handle == nullptr) {
+                if (!actuators_[i].use_dummy_ && actuators_[i].node_handle == nullptr) {
                     return return_type::ERROR;
                 }
 
