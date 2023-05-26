@@ -90,9 +90,9 @@ namespace epos_hardware
             }
 
             // Define dummy mode to test hardware interface without hardware connected
-            if (&actuators_[i].use_dummy_)
+            if (actuators_[i].use_dummy_)
             {
-                RCLCPP_INFO_STREAM(rclcpp::get_logger(HW_NAME), "dummy mode for " << &serial_number_hex);
+                RCLCPP_INFO_STREAM(rclcpp::get_logger(HW_NAME), "dummy mode for " << actuators_[i].serial_number);
             }
 
             // Find transmission corresponding with joint
