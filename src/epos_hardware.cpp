@@ -84,6 +84,17 @@ namespace epos_hardware
                 return CallbackReturn::ERROR;
             }
 
+            if (getParamBoolean(info_.joints[i].parameters, "use_dummy", &actuators_[i].use_dummy_) != return_type::OK)
+            {
+                return CallbackReturn::ERROR;
+            }
+
+            // Define dummy mode to test hardware interface without hardware connected
+            if (&actuators_[i].use_dummy_)
+            {
+                RCLCPP_INFO_STREAM(rclcpp::get_logger(HW_NAME), "dummy mode for " << &serial_number_hex);
+            }
+
             // Find transmission corresponding with joint
             for (auto transmission_info : info_.transmissions)
             {
@@ -156,28 +167,11 @@ namespace epos_hardware
             }
         }
 
-        if (getParamBoolean(info_.hardware_parameters, "use_dummy", &use_dummy_) != return_type::OK)
-        {
-            return CallbackReturn::ERROR;
-        }
-
-        // Define dummy mode to test hardware interface without hardware connected
-        if (use_dummy_)
-        {
-            RCLCPP_INFO(rclcpp::get_logger(HW_NAME), "dummy mode");
-            return CallbackReturn::SUCCESS;
-        }
-
         return CallbackReturn::SUCCESS;
     }
 
     CallbackReturn EposHardware::on_configure(const rclcpp_lifecycle::State & /*previous_state*/)
     {
-        if (use_dummy_)
-        {
-            return CallbackReturn::SUCCESS;
-        }
-
         // Store discovered EPOS devices in a map, so that we don't have to search for EPOS devices
         // when we have the same device_name, protocol stack name and interface name.
         std::map<std::tuple<std::string, std::string, std::string>, std::vector<EnumeratedNode>> discoveredDevicesMap;
@@ -186,6 +180,11 @@ namespace epos_hardware
         {
             try
             {
+                if (actuators_[i].use_dummy_) 
+                {
+                    continue;
+                }
+
                 unsigned int error_code = 0;
 
                 auto key = std::make_tuple(actuators_[i].device_name, actuators_[i].protocol_stack_name, actuators_[i].interface_name);
@@ -257,17 +256,21 @@ namespace epos_hardware
 
     CallbackReturn EposHardware::on_cleanup(const rclcpp_lifecycle::State & /*previous_state*/)
     {
-        if (use_dummy_)
+        // Close devices when at least one is connected
+        for (size_t i = 0; i < actuators_.size(); i++) \
         {
-            return CallbackReturn::SUCCESS;
-        }
+            if (!actuators_[i].use_dummy_) 
+            {
+                unsigned int error_code = 0;
+                if (VCS_CloseAllDevices(&error_code))
+                {
+                    RCLCPP_ERROR_STREAM(rclcpp::get_logger(HW_NAME), "Could not close all motor controllers: " << EposException::toErrorInfo(error_code));
+                    return CallbackReturn::ERROR;
+                }
 
-        unsigned int error_code = 0;
-        if (VCS_CloseAllDevices(&error_code))
-        {
-            RCLCPP_ERROR_STREAM(rclcpp::get_logger(HW_NAME), "Could not close all motor controllers: " << EposException::toErrorInfo(error_code));
-            return CallbackReturn::ERROR;
-        }
+                break;
+            }
+        }       
 
         return CallbackReturn::SUCCESS;
     }
@@ -322,7 +325,7 @@ namespace epos_hardware
                     {
                         if (interface.find(hardware_interface::HW_IF_POSITION) != std::string::npos)
                         {
-                            if (!use_dummy_)
+                            if (!actuators_[i].use_dummy_)
                             {
                                 VCS_WRAPPER_NA(VCS_ActivateProfilePositionMode, actuators_[i].node_handle);
 
@@ -342,7 +345,7 @@ namespace epos_hardware
                         }
                         else if (interface.find(hardware_interface::HW_IF_VELOCITY) != std::string::npos)
                         {
-                            if (!use_dummy_)
+                            if (!actuators_[i].use_dummy_)
                             {
                                 VCS_WRAPPER_NA(VCS_ActivateProfileVelocityMode, actuators_[i].node_handle);
 
@@ -360,7 +363,7 @@ namespace epos_hardware
                         }
                         else if (interface.find(epos_hardware::HW_IF_CURRENT) != std::string::npos)
                         {
-                            if (!use_dummy_)
+                            if (!actuators_[i].use_dummy_)
                             {
                                 VCS_WRAPPER_NA(VCS_ActivateCurrentMode, actuators_[i].node_handle);
                             }
@@ -387,18 +390,12 @@ namespace epos_hardware
         RCLCPP_DEBUG(rclcpp::get_logger(HW_NAME), "start");
         for (size_t i = 0; i < actuators_.size(); i++)
         {
-            if (use_dummy_ && std::isnan(actuators_[i].joint.state.position))
+            if (actuators_[i].use_dummy_ && std::isnan(actuators_[i].joint.state.position))
             {
                 actuators_[i].joint.state.position = 0.0;
                 actuators_[i].joint.state.velocity = 0.0;
                 actuators_[i].joint.state.current = 0.0;
-            }
-        }
-
-        if (!use_dummy_)
-        {
-            for (size_t i = 0; i < actuators_.size(); i++)
-            {
+            } else {
                 try
                 {
                     VCS_WRAPPER_NA(VCS_SetEnableState, actuators_[i].node_handle);
@@ -432,39 +429,45 @@ namespace epos_hardware
 
     return_type EposHardware::read(const rclcpp::Time & /* time */, const rclcpp::Duration & /* period */)
     {
-        if (use_dummy_)
-        {
-            return return_type::OK;
-        }
-
         try
         {
             for (size_t i = 0; i < actuators_.size(); i++)
             {
-                int position_raw, velocity_raw;
-                short current_raw;
-
-                // Only publish position when encoder resolution is set
-                if (actuators_[i].encoder_resolution != 0)
+                if (actuators_[i].use_dummy_) 
                 {
-                    VCS_WRAPPER(VCS_GetPositionIs, actuators_[i].node_handle, &position_raw);
-                    actuators_[i].actuator.state.position = (static_cast<double>(position_raw) * M_PI_2 / actuators_[i].encoder_resolution); // Quat-counts -> rad
+                    actuators_[i].actuator.transmission_passthrough_.position = actuators_[i].actuator.command.position;
+                    actuators_[i].actuator.transmission_passthrough_.velocity = actuators_[i].actuator.command.velocity;
+
+                    actuators_[i].transmission->actuator_to_joint();
+
+                    actuators_[i].joint.state.position = actuators_[i].joint.transmission_passthrough_.position;
+                    actuators_[i].joint.state.velocity = actuators_[i].joint.transmission_passthrough_.velocity;
+                } else {
+                    int position_raw, velocity_raw;
+                    short current_raw;
+
+                    // Only publish position when encoder resolution is set
+                    if (actuators_[i].encoder_resolution != 0)
+                    {
+                        VCS_WRAPPER(VCS_GetPositionIs, actuators_[i].node_handle, &position_raw);
+                        actuators_[i].actuator.state.position = (static_cast<double>(position_raw) * M_PI_2 / actuators_[i].encoder_resolution); // Quat-counts -> rad
+                    }
+
+                    VCS_WRAPPER(VCS_GetVelocityIs, actuators_[i].node_handle, &velocity_raw);
+                    actuators_[i].actuator.state.velocity = (static_cast<double>(velocity_raw) * M_PI / 30.); // rpm -> rad/s
+
+                    VCS_WRAPPER(VCS_GetCurrentIs, actuators_[i].node_handle, &current_raw);
+                    auto s = (actuators_[i].reversed) ? -1.0 : 1.0;
+                    actuators_[i].joint.state.current = current_raw * s / 1000.; // mA -> A
+
+                    actuators_[i].actuator.transmission_passthrough_.position = actuators_[i].actuator.state.position;
+                    actuators_[i].actuator.transmission_passthrough_.velocity = actuators_[i].actuator.state.velocity;
+
+                    actuators_[i].transmission->actuator_to_joint();
+
+                    actuators_[i].joint.state.position = actuators_[i].joint.transmission_passthrough_.position;
+                    actuators_[i].joint.state.velocity = actuators_[i].joint.transmission_passthrough_.velocity;
                 }
-
-                VCS_WRAPPER(VCS_GetVelocityIs, actuators_[i].node_handle, &velocity_raw);
-                actuators_[i].actuator.state.velocity = (static_cast<double>(velocity_raw) * M_PI / 30.); // rpm -> rad/s
-
-                VCS_WRAPPER(VCS_GetCurrentIs, actuators_[i].node_handle, &current_raw);
-                auto s = (actuators_[i].reversed) ? -1.0 : 1.0;
-                actuators_[i].joint.state.current = current_raw * s / 1000.; // mA -> A
-
-                actuators_[i].actuator.transmission_passthrough_.position = actuators_[i].actuator.state.position;
-                actuators_[i].actuator.transmission_passthrough_.velocity = actuators_[i].actuator.state.velocity;
-
-                actuators_[i].transmission->actuator_to_joint();
-
-                actuators_[i].joint.state.position = actuators_[i].joint.transmission_passthrough_.position;
-                actuators_[i].joint.state.velocity = actuators_[i].joint.transmission_passthrough_.velocity;
             }
         }
         catch (const EposException &error)
@@ -478,62 +481,68 @@ namespace epos_hardware
 
     return_type EposHardware::write(const rclcpp::Time & /* time */, const rclcpp::Duration & /* period */)
     {
-        if (use_dummy_)
-        {
-            return return_type::OK;
-        }
-
         try
         {
             for (size_t i = 0; i < actuators_.size(); i++)
             {
-                actuators_[i].joint.transmission_passthrough_.position = actuators_[i].joint.command.position;
-                actuators_[i].joint.transmission_passthrough_.velocity = actuators_[i].joint.command.velocity;
-
-                actuators_[i].transmission->joint_to_actuator();
-
-                actuators_[i].actuator.command.position = actuators_[i].actuator.transmission_passthrough_.position;
-                actuators_[i].actuator.command.velocity = actuators_[i].actuator.transmission_passthrough_.velocity;
-
-                if (actuators_[i].command_interface_name == hardware_interface::HW_IF_POSITION)
+                if (actuators_[i].use_dummy_) 
                 {
-                    if (std::isnan(actuators_[i].actuator.command.position))
-                    {
-                        continue;
-                    }
+                    actuators_[i].joint.transmission_passthrough_.position = actuators_[i].joint.state.position;
+                    actuators_[i].joint.transmission_passthrough_.velocity = actuators_[i].joint.state.velocity;
 
-                    // rad -> quad-counts of the encoder
-                    long cmd = static_cast<long>(actuators_[i].actuator.command.position * 2 * actuators_[i].encoder_resolution / M_PI);
+                    actuators_[i].transmission->joint_to_actuator();
 
-                    VCS_WRAPPER(VCS_MoveToPosition, actuators_[i].node_handle, cmd, true, true);
-                }
-                else if (actuators_[i].command_interface_name == hardware_interface::HW_IF_VELOCITY)
-                {
-                    if (std::isnan(actuators_[i].actuator.command.current))
-                    {
-                        continue;
-                    }
+                    actuators_[i].actuator.command.position = actuators_[i].actuator.transmission_passthrough_.position;
+                    actuators_[i].actuator.command.velocity = actuators_[i].actuator.transmission_passthrough_.velocity;
+                } else {
+                    actuators_[i].joint.transmission_passthrough_.position = actuators_[i].joint.command.position;
+                    actuators_[i].joint.transmission_passthrough_.velocity = actuators_[i].joint.command.velocity;
 
-                    long cmd = static_cast<long>(actuators_[i].actuator.command.velocity * 30. / M_PI);
+                    actuators_[i].transmission->joint_to_actuator();
 
-                    if (cmd == 0L)
-                    {
-                        VCS_WRAPPER_NA(VCS_HaltVelocityMovement, actuators_[i].node_handle);
-                    }
-                    else
-                    {
-                        VCS_WRAPPER(VCS_MoveWithVelocity, actuators_[i].node_handle, cmd);
-                    }
-                }
-                else if (actuators_[i].command_interface_name == epos_hardware::HW_IF_CURRENT)
-                {
-                    if (std::isnan(actuators_[i].actuator.command.current))
-                    {
-                        continue;
-                    }
+                    actuators_[i].actuator.command.position = actuators_[i].actuator.transmission_passthrough_.position;
+                    actuators_[i].actuator.command.velocity = actuators_[i].actuator.transmission_passthrough_.velocity;
 
-                    long cmd = actuators_[i].joint.command.current * 1000; // # A -> mA
-                    VCS_WRAPPER(VCS_SetCurrentMustEx, actuators_[i].node_handle, cmd);
+                    if (actuators_[i].command_interface_name == hardware_interface::HW_IF_POSITION)
+                    {
+                        if (std::isnan(actuators_[i].actuator.command.position))
+                        {
+                            continue;
+                        }
+
+                        // rad -> quad-counts of the encoder
+                        long cmd = static_cast<long>(actuators_[i].actuator.command.position * 2 * actuators_[i].encoder_resolution / M_PI);
+
+                        VCS_WRAPPER(VCS_MoveToPosition, actuators_[i].node_handle, cmd, true, true);
+                    }
+                    else if (actuators_[i].command_interface_name == hardware_interface::HW_IF_VELOCITY)
+                    {
+                        if (std::isnan(actuators_[i].actuator.command.current))
+                        {
+                            continue;
+                        }
+
+                        long cmd = static_cast<long>(actuators_[i].actuator.command.velocity * 30. / M_PI);
+
+                        if (cmd == 0L)
+                        {
+                            VCS_WRAPPER_NA(VCS_HaltVelocityMovement, actuators_[i].node_handle);
+                        }
+                        else
+                        {
+                            VCS_WRAPPER(VCS_MoveWithVelocity, actuators_[i].node_handle, cmd);
+                        }
+                    }
+                    else if (actuators_[i].command_interface_name == epos_hardware::HW_IF_CURRENT)
+                    {
+                        if (std::isnan(actuators_[i].actuator.command.current))
+                        {
+                            continue;
+                        }
+
+                        long cmd = actuators_[i].joint.command.current * 1000; // # A -> mA
+                        VCS_WRAPPER(VCS_SetCurrentMustEx, actuators_[i].node_handle, cmd);
+                    }
                 }
             }
         }
@@ -548,11 +557,11 @@ namespace epos_hardware
 
     return_type EposHardware::stop()
     {
-        if (!use_dummy_)
+        for (size_t i = 0; i < actuators_.size(); i++)
         {
-            for (size_t i = 0; i < actuators_.size(); i++)
+            try
             {
-                try
+                if (!actuators_[i].use_dummy_)
                 {
                     // Halt movement when needed
                     if (actuators_[i].command_interface_name == hardware_interface::HW_IF_POSITION)
@@ -566,11 +575,11 @@ namespace epos_hardware
 
                     VCS_WRAPPER_NA(VCS_SetDisableState, actuators_[i].node_handle);
                 }
-                catch (const EposException &error)
-                {
-                    RCLCPP_ERROR_STREAM(rclcpp::get_logger(HW_NAME), "Cannot disable motor controller for joint '" << actuators_[i].name << "': " << error.what());
-                    return return_type::ERROR;
-                }
+            }
+            catch (const EposException &error)
+            {
+                RCLCPP_ERROR_STREAM(rclcpp::get_logger(HW_NAME), "Cannot disable motor controller for joint '" << actuators_[i].name << "': " << error.what());
+                return return_type::ERROR;
             }
         }
 

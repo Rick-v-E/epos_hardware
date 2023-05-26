@@ -67,6 +67,7 @@ namespace epos_hardware
     int encoder_resolution;
     bool clear_faults = false;
     bool reversed = false;
+    bool use_dummy_ = false;
 
     NodeHandlePtr node_handle;
     std::shared_ptr<transmission_interface::Transmission> transmission;
@@ -117,7 +118,6 @@ namespace epos_hardware
 
     std::vector<Actuator> actuators_;
     EposFactory epos_factory_;
-    bool use_dummy_ = false;
   };
 
 } // namespace motionmind_hardware
