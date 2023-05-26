@@ -427,7 +427,7 @@ namespace epos_hardware
         return CallbackReturn::SUCCESS;
     }
 
-    return_type EposHardware::read(const rclcpp::Time & /* time */, const rclcpp::Duration & /* period */)
+    return_type EposHardware::read(const rclcpp::Time & /* time */, const rclcpp::Duration &period)
     {
         try
         {
@@ -435,13 +435,15 @@ namespace epos_hardware
             {
                 if (actuators_[i].use_dummy_) 
                 {
-                    actuators_[i].actuator.transmission_passthrough_.position = actuators_[i].actuator.command.position;
-                    actuators_[i].actuator.transmission_passthrough_.velocity = actuators_[i].actuator.command.velocity;
+                    if (actuators_[i].command_interface_name == hardware_interface::HW_IF_POSITION) {
+                        actuators_[i].joint.state.position = actuators_[i].joint.command.position;   
+                    } else if (actuators_[i].command_interface_name == hardware_interface::HW_IF_VELOCITY) {
+                        // Simulate position
+                        auto rot_dist = actuators_[i].joint.command.velocity * period.seconds();
+                        actuators_[i].joint.state.position = std::fmod(actuators_[i].joint.state.position + rot_dist, 2.0 * M_PI);
+                    }
 
-                    actuators_[i].transmission->actuator_to_joint();
-
-                    actuators_[i].joint.state.position = actuators_[i].joint.transmission_passthrough_.position;
-                    actuators_[i].joint.state.velocity = actuators_[i].joint.transmission_passthrough_.velocity;
+                    actuators_[i].joint.state.velocity = actuators_[i].joint.command.velocity;
                 } else {
                     int position_raw, velocity_raw;
                     short current_raw;
@@ -487,62 +489,56 @@ namespace epos_hardware
             {
                 if (actuators_[i].use_dummy_) 
                 {
-                    actuators_[i].joint.transmission_passthrough_.position = actuators_[i].joint.state.position;
-                    actuators_[i].joint.transmission_passthrough_.velocity = actuators_[i].joint.state.velocity;
+                    continue;
+                }
+                
+                actuators_[i].joint.transmission_passthrough_.position = actuators_[i].joint.command.position;
+                actuators_[i].joint.transmission_passthrough_.velocity = actuators_[i].joint.command.velocity;
 
-                    actuators_[i].transmission->joint_to_actuator();
+                actuators_[i].transmission->joint_to_actuator();
 
-                    actuators_[i].actuator.command.position = actuators_[i].actuator.transmission_passthrough_.position;
-                    actuators_[i].actuator.command.velocity = actuators_[i].actuator.transmission_passthrough_.velocity;
-                } else {
-                    actuators_[i].joint.transmission_passthrough_.position = actuators_[i].joint.command.position;
-                    actuators_[i].joint.transmission_passthrough_.velocity = actuators_[i].joint.command.velocity;
+                actuators_[i].actuator.command.position = actuators_[i].actuator.transmission_passthrough_.position;
+                actuators_[i].actuator.command.velocity = actuators_[i].actuator.transmission_passthrough_.velocity;
 
-                    actuators_[i].transmission->joint_to_actuator();
-
-                    actuators_[i].actuator.command.position = actuators_[i].actuator.transmission_passthrough_.position;
-                    actuators_[i].actuator.command.velocity = actuators_[i].actuator.transmission_passthrough_.velocity;
-
-                    if (actuators_[i].command_interface_name == hardware_interface::HW_IF_POSITION)
+                if (actuators_[i].command_interface_name == hardware_interface::HW_IF_POSITION)
+                {
+                    if (std::isnan(actuators_[i].actuator.command.position))
                     {
-                        if (std::isnan(actuators_[i].actuator.command.position))
-                        {
-                            continue;
-                        }
-
-                        // rad -> quad-counts of the encoder
-                        long cmd = static_cast<long>(actuators_[i].actuator.command.position * 2 * actuators_[i].encoder_resolution / M_PI);
-
-                        VCS_WRAPPER(VCS_MoveToPosition, actuators_[i].node_handle, cmd, true, true);
+                        continue;
                     }
-                    else if (actuators_[i].command_interface_name == hardware_interface::HW_IF_VELOCITY)
+
+                    // rad -> quad-counts of the encoder
+                    long cmd = static_cast<long>(actuators_[i].actuator.command.position * 2 * actuators_[i].encoder_resolution / M_PI);
+
+                    VCS_WRAPPER(VCS_MoveToPosition, actuators_[i].node_handle, cmd, true, true);
+                }
+                else if (actuators_[i].command_interface_name == hardware_interface::HW_IF_VELOCITY)
+                {
+                    if (std::isnan(actuators_[i].actuator.command.current))
                     {
-                        if (std::isnan(actuators_[i].actuator.command.current))
-                        {
-                            continue;
-                        }
-
-                        long cmd = static_cast<long>(actuators_[i].actuator.command.velocity * 30. / M_PI);
-
-                        if (cmd == 0L)
-                        {
-                            VCS_WRAPPER_NA(VCS_HaltVelocityMovement, actuators_[i].node_handle);
-                        }
-                        else
-                        {
-                            VCS_WRAPPER(VCS_MoveWithVelocity, actuators_[i].node_handle, cmd);
-                        }
+                        continue;
                     }
-                    else if (actuators_[i].command_interface_name == epos_hardware::HW_IF_CURRENT)
+
+                    long cmd = static_cast<long>(actuators_[i].actuator.command.velocity * 30. / M_PI);
+
+                    if (cmd == 0L)
                     {
-                        if (std::isnan(actuators_[i].actuator.command.current))
-                        {
-                            continue;
-                        }
-
-                        long cmd = actuators_[i].joint.command.current * 1000; // # A -> mA
-                        VCS_WRAPPER(VCS_SetCurrentMustEx, actuators_[i].node_handle, cmd);
+                        VCS_WRAPPER_NA(VCS_HaltVelocityMovement, actuators_[i].node_handle);
                     }
+                    else
+                    {
+                        VCS_WRAPPER(VCS_MoveWithVelocity, actuators_[i].node_handle, cmd);
+                    }
+                }
+                else if (actuators_[i].command_interface_name == epos_hardware::HW_IF_CURRENT)
+                {
+                    if (std::isnan(actuators_[i].actuator.command.current))
+                    {
+                        continue;
+                    }
+
+                    long cmd = actuators_[i].joint.command.current * 1000; // # A -> mA
+                    VCS_WRAPPER(VCS_SetCurrentMustEx, actuators_[i].node_handle, cmd);
                 }
             }
         }
