@@ -247,7 +247,23 @@ int EposFactory::EnumerateNodes(const std::string device_name, const std::string
       return 1;
     }
     unsigned int bytes_read;
-    if (!VCS_GetObject(handle->ptr, i, 0x2004, 0x00, &node.serial_number, 8, &bytes_read, error_code))
+    if (device_name == "EPOS2")
+    {
+      if (!VCS_GetObject(handle->ptr, i, 0x2004, 0x00, &node.serial_number, sizeof(node.serial_number), &bytes_read, error_code))
+      {
+        RCLCPP_ERROR_STREAM(rclcpp::get_logger("EposHardware"), "Could not read serial number for device '" << device_name << "' on node " << i);
+        node.serial_number = 0;
+      }
+    }
+    else if (device_name == "EPOS4")
+    {
+      if (!VCS_GetObject(handle->ptr, i, 0x2100, 0x01, &node.serial_number, sizeof(node.serial_number), &bytes_read, error_code))
+      {
+        RCLCPP_ERROR_STREAM(rclcpp::get_logger("EposHardware"), "Could not read serial number for device '" << device_name << "' on node " << i);
+        node.serial_number = 0;
+      }
+    }
+    else
     {
       node.serial_number = 0;
     }
