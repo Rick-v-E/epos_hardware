@@ -47,6 +47,12 @@ runtime via `perform_command_mode_switch()`, which activates the corresponding
 EPOS profile mode (`VCS_ActivateProfilePositionMode` / `…VelocityMode` /
 `…CurrentMode`) and applies the configured profile limits.
 
+> `position` and `velocity` are the standard `ros2_control` interface names.
+> `current` is **driver-specific** (`epos_hardware::HW_IF_CURRENT`, see
+> `include/epos_hardware/epos_hardware.hpp`) and therefore not picked up by
+> `joint_state_broadcaster` on its own — add it through that controller's
+> `map_interface_to_joint_state` parameter if you want it in `/joint_states`.
+
 ## Transmissions
 
 Each joint must have a `transmission_interface/SimpleTransmission`. The driver
