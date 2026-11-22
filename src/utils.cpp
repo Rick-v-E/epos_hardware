@@ -324,7 +324,7 @@ return_type getParamDouble(std::unordered_map<std::string, std::string> paramete
     return return_type::ERROR;
   }
 
-  int value = std::stod(parameter_map.at(parameter_name));
+  double value = std::stod(parameter_map.at(parameter_name));
   *variable_ptr = value;
   return return_type::OK;
 }
