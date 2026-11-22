@@ -20,6 +20,15 @@ ros2 run epos_hardware list_available_devices
 Prints every reachable controller with its **serial number** (hex), which you
 put into the URDF below.
 
+> ⚠️ This tool **segfaults when no controller is attached**, and the serial it
+> reads may come from a different object than the identity object. Both are
+> described, with a working alternative, in
+> [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+>
+> If every query returns `0x34000007 "Serial data frame not received"` while
+> the OS does see the device, the controller has no supply voltage — USB powers
+> only its FTDI chip.
+
 ## URDF `ros2_control` block
 
 ```xml

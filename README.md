@@ -50,6 +50,7 @@ Then reference the `epos_hardware/EposHardware` plugin from your robot's URDF
 - [docs/BUILD.md](docs/BUILD.md) — prerequisites, library install, build, Lyrical port notes
 - [docs/HARDWARE.md](docs/HARDWARE.md) — wiring, udev, URDF device parameters
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — common problems & fixes
+- [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) — open defects and traps, with what is proven and what is not
 
 > Defence-specific deployment/security documentation is maintained privately in
 > `nexos_ros2_defence` and is intentionally not part of this public repository.
