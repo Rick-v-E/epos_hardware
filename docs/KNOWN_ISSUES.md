@@ -22,8 +22,9 @@ followed by `No devices found!`.
 Observed on ROS 2 Lyrical / Ubuntu 26.04 / x86_64, built at `v0.1.0`, against
 EPOS Command Library 6.8.1.0 (`lib/intel/x86_64`).
 
-`check_single_device` handles its empty case cleanly, so this is specific to
-`list_available_devices`.
+`check_single_device` crashes in its own empty case too, but for a different
+and now localised reason - see below. The claim that it handles that case
+cleanly stood here until 2026-11-25 and was wrong.
 
 **What it is not.** The obvious theory, an unchecked `CreateDeviceHandle`, does
 not hold: `EposFactory::CreateDeviceHandle` returns an empty `DeviceHandlePtr`
@@ -114,3 +115,83 @@ ldconfig
 The `chmod` is not optional: the archive carries its library directories as
 `drwx------`, and without it the later `dlopen` fails with
 `Permission denied`.
+
+## `check_single_device` is not a read-only check
+
+**Status:** confirmed by reading the source and by running it.
+
+The name reads like an inspection. It is not. After querying the controller it
+**enables the drive and commands motion** (`src/check_single_device.cpp:100-116`):
+
+```cpp
+std::cout << "Enabling Motor" << std::endl;
+VCS_WRAPPER_NA(VCS_SetEnableState, node_handle_);
+VCS_WRAPPER_NA(VCS_ActivateProfileVelocityMode, node_handle_);
+
+std::cout << "Start moving Motor for 10 seconds" << std::endl;
+VCS_WRAPPER(VCS_MoveWithVelocity, node_handle_, 1000.0);
+```
+
+The commanded value is **1000 rpm at the motor, for ten seconds**, in Profile
+Velocity Mode. The `Moving with velocity of ...` lines that follow are the
+*measured* velocity (`VCS_GetVelocityIs`, `:110`), not the command - with no
+motor attached they read `0`, which makes the output look harmless when it is
+not.
+
+It also **clears faults** rather than only reporting them (`:61-67`): if
+`VCS_GetNbOfDeviceError` returns anything, it calls `VCS_ClearFault`. A fault
+you wanted to keep for diagnosis is gone afterwards.
+
+In full, the tool disables the drive, reads the error list, clears it if
+non-empty, reads the velocity and position profiles, enables the drive, runs
+the ten-second velocity move, halts, and disables again.
+
+**Do not run it on an axis that must not move.** On the NEXOS PTU25M this is a
+hardware hazard rather than an inconvenience: the tilt cable is routed through
+the pan axis, there is no slip ring, and neither axis has end stops, so an
+unattended ten-second move can tear the cable. Use it only with the output
+decoupled or the axis cleared, and know where the supply switch is.
+
+For an actual read-only identity check there is no tool in this package. Query
+the controller directly instead - the `VCS_GetObject` snippet under
+*`list_available_devices` segfaults* above reads the serial number and touches
+nothing else.
+
+## `check_single_device` dereferences a null handle when the serial is not found
+
+**Status:** confirmed, cause localised, fix obvious.
+
+`src/check_single_device.cpp:38-43`:
+
+```cpp
+if (!node_handle_)
+{
+    std::cout << "Could not find motor" << std::endl;
+}
+
+std::cout << "Found motor " << argv[1] << std::endl;
+```
+
+There is no `return` in that branch. The program reports the failure, then
+immediately reports success, then enters the `try` block and passes the null
+handle to `VCS_SetDisableState` (`:47`):
+
+```console
+$ ros2 run epos_hardware check_single_device deadbeef
+Searching for motor deadbeef...
+FT_DEVICE_NOT_FOUND:FT_OpenEx: Success
+Could not find motor
+Found motor deadbeef
+[ros2run]: Segmentation fault
+```
+
+Observed on ROS 2 Lyrical / Ubuntu 26.04 / arm64 (Raspberry Pi 4), built at
+`v0.1.0`, against EPOS Command Library 6.8.1.0 (`lib/arm/v8`), with two EPOS2
+24/5 units attached and powered - the crash is about the *queried* serial not
+matching, not about the bus being empty.
+
+A `return 1;` inside the branch fixes it. Until then: the `Found motor` line
+is not evidence that a controller was found. Read the line above it.
+
+This is a different defect from the `list_available_devices` segfault further
+up, which is still unlocalised.
